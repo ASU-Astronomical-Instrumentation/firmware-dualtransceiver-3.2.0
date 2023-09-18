@@ -22,12 +22,13 @@ class InvalidCommandException(Exception):
         super().__init__("Issued invalid command to MC")
 
 
-class SerialController:
+class DualTransceiver:
     def __init__(self, sercom) -> None:
         ser = self.ser = serial.Serial()
         ser.port = sercom
         ser.baudrate = 115200
         ser.timeout = SERIAL_READ_TIMEOUT
+        self.open()
 
     def open(self):
         if self.ser.is_open:
@@ -101,3 +102,19 @@ class SerialController:
             return True
         else:
             return False
+
+    def set_attenuation(self, address: int, attenuation: float) -> bool:
+        assert address >= 1, "Address range is [1-4]"
+        assert address <= 4, "Address range is [1-4]"
+        atten = int(round(attenuation * 4))
+        packet = self.transact(2, address, atten, 0)
+        cmd, status, arg2, arg3, _ = struct.unpack("<IIIII", packet)
+        return status == 1
+
+    def get_attenuation(self, address: int) -> float:
+        assert address >= 1, "Address range is [1-4]"
+        assert address <= 4, "Address range is [1-4]"
+        packet = self.transact(3, address, 0, 0)
+        cmd, atten, arg2, arg3, _ = struct.unpack("<IIIII", packet)
+        atten = atten / 4.0
+        return atten

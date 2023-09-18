@@ -25,6 +25,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <Arduino.h>
+#include <SPI.h>
 
 struct Packet
 {
@@ -77,9 +78,62 @@ uint16_t calc_crc(char *msg, int n)
   return (x);
 }
 
+//********************************************************************************
+#define SPI_CHIPSELECT_ATTENUATOR_PIN 10
+#define DEFAULT_ATENUATION 127 // 31.75dB -> 127
+uint32_t atten[4] = {0, 0, 0, 0};
+SPISettings spi_attenuators(4000000, LSBFIRST, SPI_MODE0);
+
+/**
+ * @brief Sets a specified attenuator to a given value.
+ *
+ * @param address attenuator address [1, 4]
+ * @param atten_val desired attenuation in db
+ * @return int status: -1 fail and 1 success
+ */
+uint32_t setAttenuation(uint32_t address, uint32_t atten_val)
+{
+  int status = 0;
+  // Round atten_val to nearest quarter
+  atten[address - 1] = atten_val;
+  digitalWrite(SPI_CHIPSELECT_ATTENUATOR_PIN, LOW);
+  SPI.beginTransaction(spi_attenuators);
+  SPI.transfer((uint8_t)atten_val);
+  SPI.transfer(address);
+  SPI.endTransaction();
+  digitalWrite(SPI_CHIPSELECT_ATTENUATOR_PIN, HIGH);
+  status = 1;
+  return status;
+}
+
+/**
+ * @brief Set all of the available attenuators to a given value
+ *
+ * @param val attenuation in db
+ * @return int status: -1 fail and 1 success
+ */
+int setAllAttenuation(uint32_t val)
+{
+  int status = 0;
+  for (size_t i = 1; i < 5; i++)
+  {
+    status = setAttenuation(i, val);
+    if (!status) // error occured, abort and report
+      return status;
+  }
+  return status;
+}
+
+//********************************************************************************
+
 void setup()
 {
   Serial.begin(115200);
+  SPI.begin();
+
+  pinMode(SPI_CHIPSELECT_ATTENUATOR_PIN, OUTPUT);
+  digitalWrite(SPI_CHIPSELECT_ATTENUATOR_PIN, HIGH);
+  setAllAttenuation(DEFAULT_ATENUATION); // initialize the attenuators to a predefined value: set in 'project.h'
 }
 
 /*!
@@ -94,6 +148,16 @@ Packet do_command(Packet pkt)
   case 1: // Check Connection
     retpacket.command = pkt.command;
     retpacket.arg1.u = 1;
+    break;
+
+  case 2: // Set attenuation
+    retpacket.command = pkt.command;
+    retpacket.arg1.u = setAttenuation(pkt.arg1.u, pkt.arg2.u);
+    break;
+
+  case 3: // Get attenuation
+    retpacket.command = pkt.command;
+    retpacket.arg1.u = atten[pkt.arg1.u - 1];
     break;
 
   default:
