@@ -6,6 +6,12 @@ from time import sleep
 SERIAL_READ_TIMEOUT = 0.250  # Seconds
 SIZET_MCU_PACKET_STRUCT = 20
 
+# Addresses
+SYSTEM1RFOUT = 1
+SYSTEM1RFIN = 2
+SYSTEM2RFOUT = 3
+SYSTEM2RFIN = 4
+
 
 class BadPacketException(Exception):
     def __init__(self):
